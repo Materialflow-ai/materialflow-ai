@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, User, Shield, Key, Bell, Palette, CreditCard, Download, Trash2, ChevronRight, Plus, Copy, RefreshCw, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { X, User, Shield, Key, Bell, Palette, CreditCard, Download, Trash2, ChevronRight, Plus, Copy, RefreshCw, Eye, EyeOff, AlertTriangle, Github, Cloud, Variable } from 'lucide-react';
 
 export default function SettingsPanel({ settings, onUpdate, onClose }) {
   const [activeSection, setActiveSection] = useState('profile');
@@ -7,6 +7,9 @@ export default function SettingsPanel({ settings, onUpdate, onClose }) {
   const sections = [
     { id: 'profile', icon: User, label: 'Profile', desc: 'Name, email, avatar' },
     { id: 'apikeys', icon: Key, label: 'API Keys', desc: 'Manage provider keys' },
+    { id: 'deploy', icon: Cloud, label: 'Deploy Tokens', desc: 'Vercel, Netlify tokens' },
+    { id: 'github', icon: Github, label: 'GitHub', desc: 'Repository sync' },
+    { id: 'envvars', icon: Variable, label: 'Env Variables', desc: 'Secrets & config' },
     { id: 'appearance', icon: Palette, label: 'Appearance', desc: 'Theme and fonts' },
     { id: 'notifications', icon: Bell, label: 'Notifications', desc: 'Alert preferences' },
     { id: 'credits', icon: CreditCard, label: 'Credits & Billing', desc: `${settings.credits} credits remaining` },
@@ -40,6 +43,9 @@ export default function SettingsPanel({ settings, onUpdate, onClose }) {
         <div className="settings-content">
           {activeSection === 'profile' && <ProfileSection settings={settings} onUpdate={onUpdate} />}
           {activeSection === 'apikeys' && <ApiKeysSection settings={settings} onUpdate={onUpdate} />}
+          {activeSection === 'deploy' && <DeployTokensSection settings={settings} onUpdate={onUpdate} />}
+          {activeSection === 'github' && <GitHubSection settings={settings} onUpdate={onUpdate} />}
+          {activeSection === 'envvars' && <EnvVarsSection settings={settings} onUpdate={onUpdate} />}
           {activeSection === 'appearance' && <AppearanceSection settings={settings} onUpdate={onUpdate} />}
           {activeSection === 'notifications' && <NotificationsSection settings={settings} onUpdate={onUpdate} />}
           {activeSection === 'credits' && <CreditsSection settings={settings} />}
@@ -285,4 +291,128 @@ function DangerSection() {
 function maskKey(key) {
   if (key.length <= 8) return '••••••••';
   return key.slice(0, 7) + '•••' + key.slice(-4);
+}
+
+function DeployTokensSection({ settings, onUpdate }) {
+  const tokens = settings.deployTokens || {};
+  const updateToken = (provider, value) => {
+    onUpdate({ ...settings, deployTokens: { ...tokens, [provider]: value } });
+  };
+
+  return (
+    <div className="settings-section">
+      <h3 className="settings-section-title">Deploy Tokens</h3>
+      <p className="settings-section-desc">Add deployment tokens for one-click deploy to production. Tokens are stored locally.</p>
+
+      {[
+        { id: 'vercel', name: 'Vercel', url: 'vercel.com/account/tokens', prefix: 'vrc_' },
+        { id: 'netlify', name: 'Netlify', url: 'app.netlify.com/user/applications#personal-access-tokens', prefix: 'nfp_' },
+      ].map(p => (
+        <div key={p.id} className="settings-field">
+          <label>{p.name} Token</label>
+          <input
+            type="password"
+            className="settings-input"
+            placeholder={`${p.prefix}•••••••••••`}
+            value={tokens[p.id] || ''}
+            onChange={(e) => updateToken(p.id, e.target.value)}
+          />
+          <span className="settings-hint">Get yours at <a href={`https://${p.url}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>{p.url}</a></span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GitHubSection({ settings, onUpdate }) {
+  const githubToken = settings.githubToken || '';
+
+  return (
+    <div className="settings-section">
+      <h3 className="settings-section-title">GitHub Integration</h3>
+      <p className="settings-section-desc">Connect your GitHub account to sync projects as repositories. Use a Personal Access Token with repo scope.</p>
+
+      <div className="settings-field">
+        <label>Personal Access Token</label>
+        <input
+          type="password"
+          className="settings-input"
+          placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+          value={githubToken}
+          onChange={(e) => onUpdate({ ...settings, githubToken: e.target.value })}
+        />
+        <span className="settings-hint">Get yours at <a href="https://github.com/settings/tokens/new?scopes=repo" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>github.com/settings/tokens</a> (select <code>repo</code> scope)</span>
+      </div>
+
+      {githubToken && (
+        <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(129,201,149,.06)', border: '1px solid rgba(129,201,149,.2)', borderRadius: 'var(--r-md)', fontSize: 11, color: 'var(--green)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Github size={13} /> GitHub connected. Use the sync button in the header to push/pull your project.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EnvVarsSection({ settings, onUpdate }) {
+  const envVars = settings.envVars || [];
+  const [newKey, setNewKey] = useState('');
+  const [newVal, setNewVal] = useState('');
+
+  const addVar = () => {
+    if (!newKey.trim()) return;
+    const updated = [...envVars, { key: newKey.trim().toUpperCase(), value: newVal, id: Date.now().toString() }];
+    onUpdate({ ...settings, envVars: updated });
+    setNewKey('');
+    setNewVal('');
+  };
+
+  const removeVar = (id) => {
+    onUpdate({ ...settings, envVars: envVars.filter(v => v.id !== id) });
+  };
+
+  return (
+    <div className="settings-section">
+      <h3 className="settings-section-title">Environment Variables</h3>
+      <p className="settings-section-desc">Set environment variables that will be injected into your generated projects. Used for API keys, database URLs, and other secrets.</p>
+
+      {envVars.map(v => (
+        <div key={v.id} className="api-key-card">
+          <div className="api-key-header">
+            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent)' }}>{v.key}</code>
+            <button className="icon-btn" onClick={() => removeVar(v.id)} title="Remove" style={{ width: 24, height: 24, color: 'var(--red)' }}>
+              <Trash2 size={12} />
+            </button>
+          </div>
+          <div className="api-key-value">
+            <code>{v.value ? maskKey(v.value) : '(empty)'}</code>
+          </div>
+        </div>
+      ))}
+
+      <div className="api-key-add" style={{ marginTop: 12 }}>
+        <input
+          className="settings-input"
+          placeholder="VARIABLE_NAME"
+          value={newKey}
+          onChange={(e) => setNewKey(e.target.value)}
+          style={{ maxWidth: 180 }}
+        />
+        <input
+          type="password"
+          className="settings-input"
+          placeholder="Value..."
+          value={newVal}
+          onChange={(e) => setNewVal(e.target.value)}
+          style={{ flex: 1 }}
+        />
+        <button className="pill-btn primary" onClick={addVar} disabled={!newKey.trim()}>
+          <Plus size={14} /> Add
+        </button>
+      </div>
+
+      <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--card2)', borderRadius: 'var(--r-md)', fontSize: 10, color: 'var(--text4)', lineHeight: 1.5 }}>
+        Common variables: <code>SUPABASE_URL</code>, <code>SUPABASE_ANON_KEY</code>, <code>DATABASE_URL</code>, <code>NEXT_PUBLIC_API_URL</code>
+      </div>
+    </div>
+  );
 }

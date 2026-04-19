@@ -1,103 +1,181 @@
-import React, { useState } from 'react';
-import { X, Rocket, Globe, Cloud, Github, Smartphone, Package, Download, Check, ExternalLink, Loader2 } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { X, Globe, Rocket, Check, ExternalLink, Loader2, AlertTriangle, Key, Cloud } from 'lucide-react';
+import { deployToVercel, deployToNetlify, checkDeployStatus } from '../engine/deployEngine';
 
-export default function DeployModal({ onClose, platform, projectName }) {
+export default function DeployModal({ onClose, files, html, projectName, settings, onDeploySuccess }) {
+  const [provider, setProvider] = useState('vercel');
   const [deploying, setDeploying] = useState(false);
-  const [deployStep, setDeployStep] = useState(0);
-  const [selectedTarget, setSelectedTarget] = useState(platform === 'web' ? 'netlify' : 'expo');
+  const [deployResult, setDeployResult] = useState(null);
+  const [error, setError] = useState('');
+  const [tokenInput, setTokenInput] = useState('');
 
-  const targets = platform === 'web' ? [
-    { id: 'netlify', name: 'Netlify', Icon: Globe, desc: 'Static & SSR hosting', badge: 'Recommended' },
-    { id: 'vercel', name: 'Vercel', Icon: Globe, desc: 'Edge-optimized hosting', badge: '' },
-    { id: 'cloudflare', name: 'Cloudflare Pages', Icon: Cloud, desc: 'Global CDN', badge: '' },
-    { id: 'github', name: 'GitHub Pages', Icon: Github, desc: 'Free static hosting', badge: 'Free' },
-  ] : [
-    { id: 'expo', name: 'Expo EAS', Icon: Smartphone, desc: 'Build & submit to stores', badge: 'Recommended' },
-    { id: 'apk', name: 'APK Download', Icon: Package, desc: 'Direct APK file', badge: 'Quick' },
-    { id: 'html', name: 'Download HTML', Icon: Download, desc: 'Save as HTML file', badge: '' },
-  ];
+  // Get stored tokens
+  const vercelToken = settings?.deployTokens?.vercel || '';
+  const netlifyToken = settings?.deployTokens?.netlify || '';
 
-  const steps = [
-    { label: 'Building project...', Icon: Package },
-    { label: 'Optimizing assets...', Icon: Loader2 },
-    { label: 'Uploading to CDN...', Icon: Cloud },
-    { label: 'Configuring DNS...', Icon: Globe },
-    { label: 'Deploy complete!', Icon: Check },
-  ];
+  const activeToken = provider === 'vercel' ? vercelToken : netlifyToken;
 
-  const handleDeploy = () => {
+  const handleDeploy = useCallback(async () => {
+    const token = activeToken || tokenInput;
+    if (!token) {
+      setError(`Please enter your ${provider === 'vercel' ? 'Vercel' : 'Netlify'} deploy token.`);
+      return;
+    }
+
+    // Build deployable files
+    const deployFiles = { ...files };
+    if (!deployFiles['index.html'] && html) {
+      deployFiles['index.html'] = html;
+    }
+
+    if (Object.keys(deployFiles).length === 0) {
+      setError('No files to deploy. Build your app first.');
+      return;
+    }
+
     setDeploying(true);
-    setDeployStep(0);
-    steps.forEach((_, i) => {
-      setTimeout(() => setDeployStep(i), (i + 1) * 1200);
-    });
-  };
+    setError('');
 
-  const slug = (projectName || 'app').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    try {
+      let result;
+      if (provider === 'vercel') {
+        result = await deployToVercel(token, projectName || 'materialflow-app', deployFiles);
+      } else {
+        result = await deployToNetlify(token, projectName || 'materialflow-app', deployFiles);
+      }
+
+      setDeployResult(result);
+      onDeploySuccess?.(result.url);
+
+      // Poll for ready state
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        if (attempts > 30) { clearInterval(poll); return; }
+        try {
+          const status = await checkDeployStatus(provider, token, result.id);
+          if (status.ready) {
+            setDeployResult(prev => ({ ...prev, ready: true, url: `https://${status.url}` }));
+            clearInterval(poll);
+          }
+        } catch (e) { /* continue polling */ }
+      }, 3000);
+    } catch (err) {
+      setError(err.message || 'Deployment failed');
+    } finally {
+      setDeploying(false);
+    }
+  }, [provider, activeToken, tokenInput, files, html, projectName, onDeploySuccess]);
 
   return (
-    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-content animate-in">
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal deploy-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
         <div className="modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Rocket size={18} className="icon-gradient" />
-            <span style={{ fontSize: 16, fontWeight: 700 }}>Deploy {platform === 'web' ? 'Web App' : 'Mobile App'}</span>
-          </div>
-          <button className="icon-btn" onClick={onClose}><X size={18} /></button>
+          <Rocket size={18} />
+          <span>Deploy to Production</span>
+          <button className="icon-btn" onClick={onClose} style={{ marginLeft: 'auto', width: 28, height: 28 }}><X size={16} /></button>
         </div>
 
-        {!deploying ? (
-          <>
-            <div className="modal-body">
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 12 }}>Select Deploy Target</div>
-              <div className="deploy-targets">
-                {targets.map(t => (
-                  <div key={t.id} className={`deploy-target ${selectedTarget === t.id ? 'active' : ''}`} onClick={() => setSelectedTarget(t.id)}>
-                    <div className="deploy-target-icon"><t.Icon size={18} /></div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{t.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>{t.desc}</div>
-                    </div>
-                    {t.badge && <span className={`deploy-badge ${t.badge === 'Recommended' ? 'green' : 'blue'}`}>{t.badge}</span>}
-                    <div className={`deploy-radio ${selectedTarget === t.id ? 'active' : ''}`} />
-                  </div>
-                ))}
-              </div>
+        {deployResult ? (
+          <div className="modal-body" style={{ padding: 24, textAlign: 'center' }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(129,201,149,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <Check size={28} style={{ color: 'var(--green)' }} />
             </div>
-            <div className="modal-footer">
-              <button className="pill-btn ghost" onClick={onClose}>Cancel</button>
-              <button className="pill-btn primary" onClick={handleDeploy}>
-                <Rocket size={14} /> Deploy to {targets.find(t => t.id === selectedTarget)?.name}
-              </button>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Deployed Successfully</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 16 }}>
+              {deployResult.ready ? 'Your app is live!' : 'Building... URL will be ready shortly.'}
             </div>
-          </>
+            <a
+              href={deployResult.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="pill-btn primary"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '8px 20px' }}
+            >
+              <ExternalLink size={14} /> {deployResult.url}
+            </a>
+            <div style={{ marginTop: 16 }}>
+              <button className="pill-btn ghost" onClick={onClose} style={{ fontSize: 12 }}>Close</button>
+            </div>
+          </div>
         ) : (
-          <div className="modal-body" style={{ padding: '32px 24px' }}>
-            <div className="deploy-progress">
-              {steps.map((step, i) => (
-                <div key={i} className={`deploy-step ${i < deployStep ? 'done' : i === deployStep ? 'active' : ''}`}>
-                  <div className="deploy-step-icon">
-                    {i < deployStep ? <Check size={16} /> : <step.Icon size={16} />}
-                  </div>
-                  <span className="deploy-step-label">{step.label}</span>
-                  {i === deployStep && i < steps.length - 1 && <div className="deploy-step-spinner" />}
-                </div>
+          <div className="modal-body" style={{ padding: 20 }}>
+            {/* Provider Selection */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+              {[
+                { id: 'vercel', name: 'Vercel', desc: 'Edge network, instant rollbacks' },
+                { id: 'netlify', name: 'Netlify', desc: 'CDN deploy, form handling' },
+              ].map(p => (
+                <button
+                  key={p.id}
+                  className={`deploy-provider-card ${provider === p.id ? 'active' : ''}`}
+                  onClick={() => setProvider(p.id)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '12px 14px',
+                    borderRadius: 'var(--r-md)', border: `1px solid ${provider === p.id ? 'var(--accent)' : 'var(--border)'}`,
+                    background: provider === p.id ? 'rgba(138,180,248,.06)' : 'var(--card)',
+                    cursor: 'pointer', textAlign: 'left',
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 600, color: provider === p.id ? 'var(--accent)' : 'var(--text)' }}>{p.name}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text4)', marginTop: 2 }}>{p.desc}</div>
+                </button>
               ))}
             </div>
-            {deployStep >= steps.length - 1 && (
-              <div className="deploy-success animate-in">
-                <div className="deploy-url-box">
-                  <Check size={16} style={{ color: 'var(--green)' }} />
-                  <code>https://{slug}.netlify.app</code>
-                  <button className="icon-btn" title="Copy" style={{ width: 24, height: 24 }}>
-                    <ExternalLink size={13} style={{ color: 'var(--green)' }} />
-                  </button>
+
+            {/* Token Input */}
+            {!activeToken && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                  <Key size={12} /> {provider === 'vercel' ? 'Vercel' : 'Netlify'} Deploy Token
+                </label>
+                <input
+                  type="password"
+                  className="settings-input"
+                  placeholder={`Paste your ${provider} token...`}
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                  style={{ width: '100%', fontSize: 12, padding: '8px 12px' }}
+                />
+                <div style={{ fontSize: 10, color: 'var(--text4)', marginTop: 4 }}>
+                  {provider === 'vercel'
+                    ? 'Get yours at vercel.com/account/tokens'
+                    : 'Get yours at app.netlify.com/user/applications'
+                  }
                 </div>
-                <button className="pill-btn primary" onClick={onClose}>
-                  <ExternalLink size={14} /> Open Live Site
-                </button>
               </div>
             )}
+
+            {/* Deploy Info */}
+            <div style={{ padding: '10px 12px', background: 'var(--card2)', borderRadius: 'var(--r-md)', marginBottom: 16, fontSize: 11, color: 'var(--text3)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span>Files</span>
+                <span style={{ fontWeight: 600, color: 'var(--text)' }}>{Object.keys(files || {}).length || (html ? 1 : 0)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Project</span>
+                <span style={{ fontWeight: 600, color: 'var(--text)' }}>{projectName || 'materialflow-app'}</span>
+              </div>
+            </div>
+
+            {error && (
+              <div style={{ padding: '8px 12px', background: 'rgba(242,139,130,.08)', borderRadius: 'var(--r-md)', marginBottom: 12, fontSize: 11, color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <AlertTriangle size={12} /> {error}
+              </div>
+            )}
+
+            <button
+              className="pill-btn primary"
+              onClick={handleDeploy}
+              disabled={deploying}
+              style={{ width: '100%', justifyContent: 'center', fontSize: 13, padding: '10px 0' }}
+            >
+              {deploying ? (
+                <><Loader2 size={14} className="spin" /> Deploying to {provider === 'vercel' ? 'Vercel' : 'Netlify'}...</>
+              ) : (
+                <><Cloud size={14} /> Deploy to {provider === 'vercel' ? 'Vercel' : 'Netlify'}</>
+              )}
+            </button>
           </div>
         )}
       </div>

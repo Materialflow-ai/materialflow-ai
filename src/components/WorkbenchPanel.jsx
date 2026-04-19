@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Code2, Eye, Maximize2, Copy, Check, RefreshCw, ExternalLink, QrCode, Smartphone, TabletSmartphone, AlertTriangle, Wrench, X, Globe, Github, Loader2, MousePointerClick } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo, lazy, Suspense } from 'react';
+import { Code2, Eye, Maximize2, Copy, Check, RefreshCw, ExternalLink, QrCode, Smartphone, TabletSmartphone, AlertTriangle, Wrench, X, Globe, Github, Loader2, MousePointerClick, Package } from 'lucide-react';
+import SandpackPreview, { shouldUseSandpack } from './SandpackPreview';
 
 export default function WorkbenchPanel({ activeTab, onTabChange, html, files, platform, hasContent, agentStatus, deployedUrl, githubRepo, previewErrors, onFixError, streamingText, onCodeChange, theme, inspectMode, onToggleInspect, onInspectSelect }) {
   const [copied, setCopied] = useState(false);
@@ -176,6 +177,18 @@ window.addEventListener('unhandledrejection', function(e) {
         <>
           {platform === 'mobile' ? (
             <MobilePreview html={wrappedHtml} agentStatus={agentStatus} />
+          ) : shouldUseSandpack(files) ? (
+            <div className="preview-panel">
+              <div className="preview-bar">
+                <div className="preview-dots"><span /><span /><span /></div>
+                <div className="preview-url-bar">
+                  <Package size={13} style={{ color: 'var(--green)' }} />
+                  <span style={{ color: 'var(--green)', fontSize: 10, fontWeight: 600 }}>SANDPACK</span>
+                  localhost:5173
+                </div>
+              </div>
+              <SandpackPreview files={files} theme={theme} />
+            </div>
           ) : (
             <WebPreview html={wrappedHtml} blobUrl={blobUrl} agentStatus={agentStatus} deployedUrl={deployedUrl} iframeRef={iframeRef} streamingText={streamingText} inspectMode={inspectMode} />
           )}

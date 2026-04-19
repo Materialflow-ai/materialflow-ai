@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Menu, MenuSquare, FolderOpen, ChevronDown, Save, GitFork, Download, Github, Settings, UserCircle, Sparkles, CreditCard, Globe, Check, ExternalLink, Sun, Moon, Pencil } from 'lucide-react';
+import { Menu, MenuSquare, FolderOpen, ChevronDown, Save, GitFork, Download, Github, Settings, UserCircle, Sparkles, CreditCard, Globe, Check, ExternalLink, Sun, Moon, Pencil, Loader2, Undo2, Redo2 } from 'lucide-react';
 
-export default function Header({ sidebarOpen, onToggleSidebar, projectName, credits, onSave, onFork, onExport, onSettings, showSettings, deployedUrl, githubRepo, theme, onToggleTheme, onRename }) {
+export default function Header({ sidebarOpen, onToggleSidebar, projectName, credits, onSave, onFork, onExport, onSettings, showSettings, deployedUrl, githubRepo, theme, onToggleTheme, onRename, onGitHubSync, gitSyncing, onUndo, onRedo, canUndo, canRedo }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef(null);
@@ -98,6 +98,14 @@ export default function Header({ sidebarOpen, onToggleSidebar, projectName, cred
           <Download size={14} />Export
         </button>
 
+        {/* Undo / Redo */}
+        <button className="icon-btn" onClick={onUndo} disabled={!canUndo} title="Undo" style={{ opacity: canUndo ? 1 : 0.3 }}>
+          <Undo2 size={16} />
+        </button>
+        <button className="icon-btn" onClick={onRedo} disabled={!canRedo} title="Redo" style={{ opacity: canRedo ? 1 : 0.3 }}>
+          <Redo2 size={16} />
+        </button>
+
         <div className="header-divider" />
 
         {/* Theme toggle */}
@@ -105,8 +113,13 @@ export default function Header({ sidebarOpen, onToggleSidebar, projectName, cred
           {theme === 'dark' ? <Sun size={17} className="theme-icon" /> : <Moon size={17} className="theme-icon" />}
         </button>
 
-        <button className="icon-btn" title="GitHub Sync">
-          <Github size={17} />
+        <button
+          className={`github-sync-btn ${gitSyncing ? 'syncing' : ''}`}
+          onClick={onGitHubSync}
+          title={githubRepo ? `Synced to ${githubRepo}` : 'Push to GitHub'}
+        >
+          {gitSyncing ? <Loader2 size={13} className="spin" /> : <Github size={13} />}
+          {githubRepo ? 'Synced' : 'Push'}
         </button>
         <button className={`icon-btn ${showSettings ? 'active' : ''}`} onClick={onSettings} title="Settings">
           <Settings size={17} />

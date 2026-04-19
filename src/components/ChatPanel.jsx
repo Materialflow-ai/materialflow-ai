@@ -18,7 +18,9 @@ export default function ChatPanel({
   inspectContext, onClearInspect
 }) {
   const [input, setInput] = useState('');
+  const [attachedImage, setAttachedImage] = useState(null);
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Auto-populate input when inspect context arrives
   useEffect(() => {
@@ -35,9 +37,13 @@ export default function ChatPanel({
   }, [messages, agentStatus]);
 
   const handleSubmit = () => {
-    if (!input.trim()) return;
-    onSend(input);
+    if (!input.trim() && !attachedImage) return;
+    const prompt = attachedImage
+      ? `[Screenshot: ${attachedImage.name}] ${input || 'Recreate this design as a web app'}`
+      : input;
+    onSend(prompt, attachedImage?.data);
     setInput('');
+    setAttachedImage(null);
   };
 
   const handleKeyDown = (e) => {
@@ -168,12 +174,34 @@ export default function ChatPanel({
           </div>
         )}
         <div className="chat-input-box">
-          <button className="icon-btn" title="Attach file" style={{ width: 30, height: 30 }}>
-            <Paperclip size={16} />
-          </button>
-          <button className="icon-btn" title="Upload image" style={{ width: 30, height: 30 }}>
+          {/* Image upload for screenshot-to-code */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = (ev) => {
+                setAttachedImage({ name: file.name, data: ev.target.result, size: file.size });
+              };
+              reader.readAsDataURL(file);
+              e.target.value = '';
+            }}
+          />
+          <button className="icon-btn" title="Upload screenshot for code generation" style={{ width: 30, height: 30 }} onClick={() => fileInputRef.current?.click()}>
             <Image size={16} />
           </button>
+          {attachedImage && (
+            <div style={{ position: 'relative', width: 36, height: 36, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)', flexShrink: 0 }}>
+              <img src={attachedImage.data} alt="Attached" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <button onClick={() => setAttachedImage(null)} style={{ position: 'absolute', top: -2, right: -2, width: 14, height: 14, borderRadius: '50%', background: 'var(--red)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
+                <X size={8} style={{ color: '#fff' }} />
+              </button>
+            </div>
+          )}
           <textarea
             className="chat-input"
             placeholder={

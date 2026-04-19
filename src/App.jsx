@@ -17,6 +17,8 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { generateCode } from './engine/codeGenerator';
 import { streamGenerate, parseFiles, buildPreviewHTML, calculateCredits, checkBackendHealth } from './engine/streamEngine';
 import { createProject, saveProjects, loadProjects, forkProject, exportProjectAsHTML, loadSettings, saveSettings } from './engine/projectStore';
+import { createHistory, pushCheckpoint, undo as historyUndo, redo as historyRedo, canUndo, canRedo, jumpTo } from './engine/historyEngine';
+import { createRepo, pushFiles, getUser } from './engine/githubEngine';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
@@ -59,6 +61,10 @@ export default function App() {
   const [deployedUrl, setDeployedUrl] = useState('');
   const [githubRepo, setGithubRepo] = useState('');
   const [previewErrors, setPreviewErrors] = useState([]);
+
+  // Version history
+  const [history, setHistory] = useState(() => createHistory());
+  const [gitSyncing, setGitSyncing] = useState(false);
 
   // Confirm dialog state
   const [confirmDialog, setConfirmDialog] = useState(null);
@@ -385,6 +391,59 @@ export default function App() {
 
   const handleTemplateClick = useCallback((template) => { handleSend(template.prompt); }, [handleSend]);
 
+  // GitHub sync handler
+  const handleGitHubSync = useCallback(async () => {
+    const token = settings.githubToken;
+    if (!token) {
+      toast.warn('Add a GitHub Personal Access Token in Settings > GitHub');
+      setShowSettings(true);
+      return;
+    }
+
+    setGitSyncing(true);
+    try {
+      const user = await getUser(token);
+      const repoName = (activeProject?.name || 'materialflow-app').toLowerCase().replace(/[^a-z0-9-]/g, '-');
+
+      // Try to push; if repo doesn't exist, create it
+      try {
+        await pushFiles(token, user.login, repoName, activeProject?.files || {}, `Update from MaterialFlow AI — ${new Date().toLocaleString()}`);
+      } catch (e) {
+        // Repo might not exist, create it
+        await createRepo(token, repoName, 'Built with MaterialFlow AI');
+        await pushFiles(token, user.login, repoName, activeProject?.files || {}, 'Initial commit from MaterialFlow AI');
+      }
+
+      setGithubRepo(`${user.login}/${repoName}`);
+      toast.success(`Pushed to github.com/${user.login}/${repoName}`);
+    } catch (err) {
+      toast.error(`GitHub sync failed: ${err.message}`);
+    } finally {
+      setGitSyncing(false);
+    }
+  }, [settings.githubToken, activeProject]);
+
+  // Version history handlers
+  const handleUndo = useCallback(() => {
+    const result = historyUndo(history);
+    if (result) {
+      setHistory(result.history);
+      const snap = result.snapshot;
+      updateProject({ files: snap.files, html: snap.html });
+      toast.info('Undo');
+    }
+  }, [history, updateProject]);
+
+  const handleRedo = useCallback(() => {
+    const result = historyRedo(history);
+    if (result) {
+      setHistory(result.history);
+      const snap = result.snapshot;
+      updateProject({ files: snap.files, html: snap.html });
+      toast.info('Redo');
+    }
+  }, [history, updateProject]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e) => {
@@ -411,10 +470,25 @@ export default function App() {
         if (showSettings) { setShowSettings(false); return; }
         if (showModelSelector) { setShowModelSelector(false); return; }
       }
+      // Ctrl/Cmd+Z — Undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        // Only intercept if not focused on editor/textarea
+        if (document.activeElement?.tagName !== 'TEXTAREA' && !document.activeElement?.classList?.contains('monaco-editor')) {
+          e.preventDefault();
+          handleUndo();
+        }
+      }
+      // Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z — Redo
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        if (document.activeElement?.tagName !== 'TEXTAREA' && !document.activeElement?.classList?.contains('monaco-editor')) {
+          e.preventDefault();
+          handleRedo();
+        }
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleSave, handleExport, confirmDialog, showNewProject, showDeploy, showSettings, showModelSelector]);
+  }, [handleSave, handleExport, handleUndo, handleRedo, confirmDialog, showNewProject, showDeploy, showSettings, showModelSelector]);
 
   return (
     <>
@@ -433,6 +507,12 @@ export default function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
         onRename={handleRename}
+        onGitHubSync={handleGitHubSync}
+        gitSyncing={gitSyncing}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={canUndo(history)}
+        canRedo={canRedo(history)}
       />
       <ProjectTabs
         projects={projects}
@@ -533,7 +613,16 @@ export default function App() {
       </div>
       <StatusBar platform={platform} mode={mode} model={selectedModel} agentStatus={agentStatus} agentAction={agentAction} credits={settings.credits} deployedUrl={deployedUrl} />
       {(activeProject?.html) && <DeployFab onClick={() => setShowDeploy(true)} />}
-      {showDeploy && <DeployModal onClose={() => setShowDeploy(false)} platform={platform} projectName={activeProject?.name} />}
+      {showDeploy && (
+        <DeployModal
+          onClose={() => setShowDeploy(false)}
+          files={activeProject?.files || {}}
+          html={activeProject?.html || ''}
+          projectName={activeProject?.name}
+          settings={settings}
+          onDeploySuccess={(url) => setDeployedUrl(url)}
+        />
+      )}
       {showNewProject && <NewProjectModal onClose={() => setShowNewProject(false)} onCreate={addProject} />}
       {confirmDialog && (
         <ConfirmDialog
