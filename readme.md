@@ -26,16 +26,22 @@
 
 | Feature | Description |
 |---------|-------------|
-| **AI Code Generation** | Describe your app, get a full working codebase via Claude Sonnet/Opus |
+| **AI Code Generation** | Describe your app, get a full working codebase via Claude, GPT-4o, Gemini, or DeepSeek |
+| **Multi-Model Support** | 6 AI models across 4 providers — Anthropic, OpenAI, Google, DeepSeek with per-provider streaming |
 | **Tool-Use API (v2)** | Surgical multi-file editing — no full regeneration, just precise diffs |
+| **Sandpack Runtime** | Real NPM bundling via @codesandbox/sandpack-react — Tailwind, shadcn/ui, Framer Motion work |
 | **Inspect Mode** | v0-style point-and-click element selection for contextual AI editing |
+| **Screenshot to Code** | Upload a screenshot or mockup, AI recreates it as a working web app |
+| **GitHub Sync** | Push/pull projects to GitHub repos via Git Trees API with PAT auth |
+| **Real Deployment** | One-click deploy to Vercel (API v13) and Netlify with live URLs and status polling |
+| **Supabase Integration** | Database schema generation, auth hooks, data hooks, RLS policies, SQL migrations |
 | **Architecture Planner** | AI-powered component tree, API design, and tech stack analysis |
 | **Discussion Mode** | Conversational AI advisor — no code, just strategy and guidance |
+| **Version History** | Undo/redo with checkpoint timeline, diff visualization, Ctrl+Z/Y shortcuts |
 | **Monaco Editor** | Full VS Code editing experience with syntax highlighting |
-| **Live Preview** | Real-time iframe preview with error capture and "Fix with AI" |
-| **Mobile Preview** | Device frame preview for React Native / Expo apps |
+| **Live Preview** | Real-time preview with Sandpack (JSX) or iframe (HTML), error capture, "Fix with AI" |
+| **Environment Variables** | Secure key/value store for API keys, database URLs, injected into generated projects |
 | **Dark and Light Themes** | Premium design system with 40+ CSS tokens and smooth transitions |
-| **One-Click Deploy** | Netlify, Vercel, Cloudflare Pages, or GitHub Pages |
 | **Multi-Project Tabs** | Tabbed workspace with rename, fork, delete, and ZIP export |
 | **Secure by Default** | API keys local-only, backend proxy, rate limiting, input validation |
 
@@ -298,16 +304,18 @@ materialflow-ai/
     ├── main.jsx                # React root with ErrorBoundary
     ├── App.jsx                 # Main app — state management and orchestration
     ├── components/
-    │   ├── Header.jsx          # Top bar — logo, project name, theme, actions
+    │   ├── Header.jsx          # Top bar — logo, project name, theme, undo/redo, GitHub sync
     │   ├── Sidebar.jsx         # Project list with CRUD operations
-    │   ├── ChatPanel.jsx       # AI chat — templates, inspect context, streaming
-    │   ├── WorkbenchPanel.jsx  # Preview + Monaco editor + inspect mode
+    │   ├── ChatPanel.jsx       # AI chat — templates, inspect context, screenshot upload
+    │   ├── WorkbenchPanel.jsx  # Preview (Sandpack/iframe) + Monaco editor + inspect mode
+    │   ├── SandpackPreview.jsx # Real NPM bundling via @codesandbox/sandpack-react
     │   ├── PlanPanel.jsx       # AI architecture planner (real Claude streaming)
     │   ├── DiscussPanel.jsx    # AI discussion mode (real Claude streaming)
-    │   ├── SettingsPanel.jsx   # API key management, theme, data export
+    │   ├── HistoryPanel.jsx    # Version history timeline with undo/redo/diff
+    │   ├── SettingsPanel.jsx   # API keys, deploy tokens, GitHub PAT, env vars, theme
     │   ├── ProjectTabs.jsx     # Multi-project tabbed workspace
     │   ├── StatusBar.jsx       # Bottom bar — agent status, credits, model info
-    │   ├── DeployModal.jsx     # Deployment wizard (Netlify/Vercel/CF/GHP)
+    │   ├── DeployModal.jsx     # Real Vercel/Netlify deployment with live URLs
     │   ├── DeployFab.jsx       # Floating deploy button
     │   ├── NewProjectModal.jsx # New project wizard with infra options
     │   ├── ModelSelector.jsx   # AI model picker dropdown
@@ -317,11 +325,16 @@ materialflow-ai/
     │   └── ConfirmDialog.jsx   # Custom confirmation dialog
     ├── engine/
     │   ├── streamEngine.js     # SSE streaming — generate, plan, discuss, v2
+    │   ├── modelRouter.js      # Multi-provider routing (Anthropic/OpenAI/Gemini/DeepSeek)
+    │   ├── githubEngine.js     # GitHub API — create repos, push/pull files, commits
+    │   ├── deployEngine.js     # Real Vercel API v13 + Netlify API deployment
+    │   ├── supabaseEngine.js   # Supabase project init, schema gen, auth/data hooks
+    │   ├── historyEngine.js    # Version checkpoints with undo/redo/timeline/diff
     │   ├── codeGenerator.js    # Template-based fallback code generation
     │   ├── diffEngine.js       # Surgical file patching from tool-use API
     │   └── projectStore.js     # localStorage persistence layer
     └── styles/
-        └── index.css           # 4200-line design system (dark/light themes)
+        └── index.css           # 4400-line design system (dark/light themes)
 ```
 
 ---
@@ -438,11 +451,18 @@ Push to `main` triggers automatic deployment. Required secrets:
 - [x] Inspect Mode — v0-style point-and-click contextual editing
 - [x] AI Architecture Planner — real Claude streaming
 - [x] AI Discussion Mode — conversational advisor
-- [ ] Sandpack Integration — real NPM packages in-browser
+- [x] Sandpack Runtime — real NPM packages in-browser via @codesandbox/sandpack-react
+- [x] Multi-Model Support — Anthropic, OpenAI, Google Gemini, DeepSeek streaming
+- [x] GitHub Sync — push/pull to repos via Git Trees API
+- [x] Real Deployment — Vercel API v13 + Netlify API with live URLs
+- [x] Supabase Integration — schema generation, auth hooks, data hooks, migrations
+- [x] Screenshot to Code — image upload with vision model support
+- [x] Version History — undo/redo checkpoints with timeline and diff
+- [x] Environment Variables — secure key/value management in Settings
 - [ ] WebContainers — full Node.js runtime in the browser
 - [ ] Expo/React Native — mobile app QR-code preview
-- [ ] Supabase Integration — database + auth in one click
-- [ ] Real Deployment — actual Netlify/Vercel API integration
+- [ ] Figma Import — convert Figma designs to React components
+- [ ] Autonomous Agent Mode — AI explores, debugs, and iterates independently
 - [ ] Collaborative Editing — multi-user real-time sessions
 
 ---
