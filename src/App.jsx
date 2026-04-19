@@ -50,6 +50,8 @@ export default function App() {
   const [chatWidth, setChatWidth] = useState(420);
   const [agentStatus, setAgentStatus] = useState('idle');
   const [agentAction, setAgentAction] = useState('');
+  const [inspectMode, setInspectMode] = useState(false);
+  const [inspectContext, setInspectContext] = useState(null);
   const [settings, setSettings] = useState(() => loadSettings());
   const [theme, setTheme] = useState(() => settings.appearance?.theme || 'dark');
 
@@ -212,30 +214,11 @@ export default function App() {
   // Discuss mode state
   const [discussMessages, setDiscussMessages] = useState([]);
 
-  const handleDiscussSend = useCallback((text) => {
-    const userMsg = { role: 'user', content: text };
-    const newMsgs = [...discussMessages, userMsg];
-    setDiscussMessages(newMsgs);
-
-    // Simple local response for now (real API integration reuses streamEngine)
-    setAgentStatus('thinking');
-    setTimeout(() => {
-      let responseContent;
-      if (text.includes('stack')) {
-        responseContent = "Great question! Here\u2019s my take on your project:\n\nFor a modern web app, I\u2019d recommend React + Vite + TypeScript for the frontend, with Supabase for the backend (PostgreSQL + Auth + Storage). This gives you real-time subscriptions, row-level security, and a generous free tier.\n\nWant me to elaborate on any specific aspect?";
-      } else if (text.includes('database')) {
-        responseContent = "Great question! Here\u2019s my take on your project:\n\nFor your database schema, start with these core tables: users (id, email, name, credits), projects (id, user_id, name, files), and conversations (id, project_id, messages). Use PostgreSQL with Supabase for auto-generated APIs.\n\nWant me to elaborate on any specific aspect?";
-      } else {
-        responseContent = "Great question! Here\u2019s my take on your project:\n\nBased on your description, I\u2019d suggest starting with the core user flow first \u2014 the primary action your users will take. Build that end-to-end before adding secondary features. This ensures you validate the main value proposition before investing in polish.\n\nWant me to elaborate on any specific aspect?";
-      }
-      const aiResponse = {
-        role: 'assistant',
-        content: responseContent,
-      };
-      setDiscussMessages([...newMsgs, aiResponse]);
-      setAgentStatus('idle');
-    }, 1500);
-  }, [discussMessages]);
+  // Helper: get current API key
+  const getApiKey = useCallback(() => {
+    const anthropicKey = settings.apiKeys?.find(k => k.provider === 'Anthropic');
+    return anthropicKey?.key || '';
+  }, [settings.apiKeys]);
 
   // Resize
   const handleResizeStart = useCallback((e) => {
@@ -484,9 +467,23 @@ export default function App() {
           </div>
           <div className="panel-split">
             {mode === 'plan' ? (
-              <PlanPanel onSend={handleSend} agentStatus={agentStatus} />
+              <PlanPanel
+                onSend={handleSend}
+                agentStatus={agentStatus}
+                apiKey={getApiKey()}
+                backendOnline={backendOnline}
+                selectedModel={selectedModel}
+              />
             ) : mode === 'discuss' ? (
-              <DiscussPanel messages={discussMessages} onSend={handleDiscussSend} selectedModel={selectedModel} agentStatus={agentStatus} />
+              <DiscussPanel
+                messages={discussMessages}
+                onSend={(text) => {}}
+                selectedModel={selectedModel}
+                agentStatus={agentStatus}
+                apiKey={getApiKey()}
+                backendOnline={backendOnline}
+                onStreamingMessage={(msgs) => setDiscussMessages(msgs)}
+              />
             ) : (
               <ChatPanel
                 messages={activeProject?.messages || []}
@@ -503,6 +500,8 @@ export default function App() {
                 models={MODELS}
                 onModelSelect={(m) => { setSelectedModel(m); setShowModelSelector(false); }}
                 credits={settings.credits}
+                inspectContext={inspectContext}
+                onClearInspect={() => setInspectContext(null)}
               />
             )}
             <div className="resize-handle" onMouseDown={handleResizeStart} />
@@ -524,6 +523,9 @@ export default function App() {
                 streamingText={streamingText}
                 onCodeChange={handleCodeChange}
                 theme={theme}
+                inspectMode={inspectMode}
+                onToggleInspect={() => setInspectMode(!inspectMode)}
+                onInspectSelect={(ctx) => { setInspectContext(ctx); setInspectMode(false); }}
               />
             )}
           </div>

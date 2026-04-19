@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Code2, Eye, Maximize2, Copy, Check, RefreshCw, ExternalLink, QrCode, Smartphone, TabletSmartphone, AlertTriangle, Wrench, X, Globe, Github, Loader2 } from 'lucide-react';
+import { Code2, Eye, Maximize2, Copy, Check, RefreshCw, ExternalLink, QrCode, Smartphone, TabletSmartphone, AlertTriangle, Wrench, X, Globe, Github, Loader2, MousePointerClick } from 'lucide-react';
 
-export default function WorkbenchPanel({ activeTab, onTabChange, html, files, platform, hasContent, agentStatus, deployedUrl, githubRepo, previewErrors, onFixError, streamingText, onCodeChange, theme }) {
+export default function WorkbenchPanel({ activeTab, onTabChange, html, files, platform, hasContent, agentStatus, deployedUrl, githubRepo, previewErrors, onFixError, streamingText, onCodeChange, theme, inspectMode, onToggleInspect, onInspectSelect }) {
   const [copied, setCopied] = useState(false);
   const [runtimeErrors, setRuntimeErrors] = useState([]);
   const iframeRef = useRef(null);
@@ -14,18 +14,73 @@ export default function WorkbenchPanel({ activeTab, onTabChange, html, files, pl
     }
   };
 
-  // Listen for iframe errors
+  // Listen for iframe errors and inspect mode messages
   useEffect(() => {
     const handler = (e) => {
       if (e.data?.type === 'preview-error') {
         setRuntimeErrors(prev => [...prev.slice(-4), { message: e.data.message, line: e.data.line, time: Date.now() }]);
       }
+      if (e.data?.type === 'inspect-element' && onInspectSelect) {
+        onInspectSelect({
+          html: e.data.html,
+          selector: e.data.selector,
+          tagName: e.data.tagName,
+          className: e.data.className,
+          textContent: e.data.textContent,
+        });
+      }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, []);
+  }, [onInspectSelect]);
 
-  // Inject error catcher into HTML
+  // Inject error catcher + inspect mode script into HTML
+  const inspectScript = inspectMode ? `
+<style>
+  .__mf-inspect-hover { outline: 2px solid #8AB4F8 !important; outline-offset: 2px; cursor: crosshair !important; }
+  .__mf-inspect-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999; cursor: crosshair; }
+</style>
+<script>
+(function() {
+  let lastHovered = null;
+  document.addEventListener('mouseover', function(e) {
+    if (e.target === document.body || e.target === document.documentElement) return;
+    if (lastHovered) lastHovered.classList.remove('__mf-inspect-hover');
+    e.target.classList.add('__mf-inspect-hover');
+    lastHovered = e.target;
+  }, true);
+  document.addEventListener('mouseout', function(e) {
+    if (lastHovered) lastHovered.classList.remove('__mf-inspect-hover');
+    lastHovered = null;
+  }, true);
+  document.addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    var el = e.target;
+    var path = [];
+    var cur = el;
+    while (cur && cur !== document.body && cur !== document.documentElement) {
+      var sel = cur.tagName.toLowerCase();
+      if (cur.id) sel += '#' + cur.id;
+      else if (cur.className && typeof cur.className === 'string') sel += '.' + cur.className.replace(/__mf-inspect-hover/g, '').trim().split(/\\s+/).filter(Boolean).join('.');
+      path.unshift(sel);
+      cur = cur.parentElement;
+    }
+    var html = el.outerHTML;
+    if (html.length > 500) html = html.slice(0, 500) + '...';
+    parent.postMessage({
+      type: 'inspect-element',
+      html: html,
+      selector: path.join(' > '),
+      tagName: el.tagName.toLowerCase(),
+      className: (el.className || '').replace(/__mf-inspect-hover/g, '').trim(),
+      textContent: (el.textContent || '').slice(0, 100)
+    }, '*');
+  }, true);
+})();
+</script>` : '';
+
   const wrappedHtml = html ? html.replace('</head>', `<script>
 window.addEventListener('error', function(e) {
   parent.postMessage({ type: 'preview-error', message: e.message, line: e.lineno }, '*');
@@ -33,7 +88,7 @@ window.addEventListener('error', function(e) {
 window.addEventListener('unhandledrejection', function(e) {
   parent.postMessage({ type: 'preview-error', message: e.reason?.message || String(e.reason) }, '*');
 });
-</script></head>`) : '';
+</script>${inspectScript}</head>`) : '';
 
   // Use blob URL for better performance with large generated code
   // Properly manage lifecycle to avoid memory leaks
@@ -102,6 +157,16 @@ window.addEventListener('unhandledrejection', function(e) {
             {copied ? <Check size={14} style={{ color: 'var(--green)' }} /> : <Copy size={14} />}
           </button>
         )}
+        {activeTab === 'preview' && onToggleInspect && (
+          <button
+            className={`icon-btn inspect-toggle ${inspectMode ? 'active' : ''}`}
+            onClick={onToggleInspect}
+            title={inspectMode ? 'Exit Inspect Mode' : 'Inspect Element (click to select)'}
+            style={{ width: 28, height: 28 }}
+          >
+            <MousePointerClick size={14} />
+          </button>
+        )}
         <button className="icon-btn" title="Fullscreen" style={{ width: 28, height: 28 }}>
           <Maximize2 size={14} />
         </button>
@@ -112,7 +177,15 @@ window.addEventListener('unhandledrejection', function(e) {
           {platform === 'mobile' ? (
             <MobilePreview html={wrappedHtml} agentStatus={agentStatus} />
           ) : (
-            <WebPreview html={wrappedHtml} blobUrl={blobUrl} agentStatus={agentStatus} deployedUrl={deployedUrl} iframeRef={iframeRef} streamingText={streamingText} />
+            <WebPreview html={wrappedHtml} blobUrl={blobUrl} agentStatus={agentStatus} deployedUrl={deployedUrl} iframeRef={iframeRef} streamingText={streamingText} inspectMode={inspectMode} />
+          )}
+          {/* Inspect mode indicator */}
+          {inspectMode && (
+            <div className="inspect-mode-bar">
+              <MousePointerClick size={13} />
+              <span>Click any element in the preview to select it</span>
+              <button className="pill-btn ghost" onClick={onToggleInspect} style={{ fontSize: 11, padding: '3px 10px' }}>Exit</button>
+            </div>
           )}
           {/* Error overlay */}
           {runtimeErrors.length > 0 && (
@@ -149,7 +222,7 @@ function ErrorOverlay({ errors, onFix, onDismiss }) {
   );
 }
 
-function WebPreview({ html, blobUrl, agentStatus, deployedUrl, iframeRef, streamingText }) {
+function WebPreview({ html, blobUrl, agentStatus, deployedUrl, iframeRef, streamingText, inspectMode }) {
   return (
     <div className="preview-panel">
       <div className="preview-bar">

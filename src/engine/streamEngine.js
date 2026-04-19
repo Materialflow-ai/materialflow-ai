@@ -1,7 +1,14 @@
 // MaterialFlow AI — Real AI Streaming Engine
 // Streams from Anthropic API via backend proxy, parses file output, tracks credits
 
-const API_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || '/api/generate';
+const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL)
+  ? import.meta.env.VITE_API_URL.replace('/api/generate', '')
+  : '';
+
+const API_URL = `${API_BASE}/api/generate`;
+const API_V2_URL = `${API_BASE}/api/generate-v2`;
+const API_PLAN_URL = `${API_BASE}/api/plan`;
+const API_DISCUSS_URL = `${API_BASE}/api/discuss`;
 
 /**
  * Parse <file name="...">...</file> blocks from streamed output
@@ -78,16 +85,60 @@ export function calculateCredits(inputTokens, outputTokens) {
 }
 
 /**
- * Stream code generation from the backend
- * @param {Object} options
- * @param {Array} options.messages - Chat history [{role, content}]
- * @param {string} options.apiKey - Anthropic API key
- * @param {string} options.model - Model ID
- * @param {function} options.onText - Called with each text chunk
- * @param {function} options.onDone - Called when stream completes {files, summary, inputTokens, outputTokens, creditsUsed}
- * @param {function} options.onError - Called on error
- * @param {function} options.onStatus - Called with status updates
- * @returns {AbortController} - Call .abort() to cancel
+ * Generic SSE stream reader — shared by all streaming endpoints
+ */
+async function readSSEStream(response, { onText, onDone, onError, onToolUse, signal }) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6);
+
+        try {
+          const event = JSON.parse(data);
+
+          if (event.type === 'text') {
+            fullText += event.text;
+            onText?.(event.text, fullText);
+          }
+
+          if (event.type === 'tool_use') {
+            onToolUse?.(event);
+          }
+
+          if (event.type === 'done') {
+            onDone?.({ fullText, ...event });
+          }
+
+          if (event.type === 'error') {
+            onError?.(event.error);
+          }
+        } catch (e) {
+          // Skip malformed JSON
+        }
+      }
+    }
+  } catch (error) {
+    if (error.name !== 'AbortError') {
+      onError?.(error.message || 'Connection failed');
+    }
+  }
+}
+
+/**
+ * Stream code generation from the backend (v1)
  */
 export function streamGenerate({ messages, apiKey, model = 'claude-sonnet-4-6', onText, onDone, onError, onStatus }) {
   const controller = new AbortController();
@@ -114,60 +165,29 @@ export function streamGenerate({ messages, apiKey, model = 'claude-sonnet-4-6', 
 
       onStatus?.('streaming');
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let fullText = '';
+      await readSSEStream(response, {
+        onText,
+        onDone: (result) => {
+          const files = parseFiles(result.fullText);
+          const summary = extractSummary(result.fullText);
+          const html = buildPreviewHTML(files);
+          const creditsUsed = calculateCredits(result.inputTokens, result.outputTokens);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        // Parse SSE events
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6);
-
-          try {
-            const event = JSON.parse(data);
-
-            if (event.type === 'text') {
-              fullText += event.text;
-              onText?.(event.text, fullText);
-            }
-
-            if (event.type === 'done') {
-              const files = parseFiles(fullText);
-              const summary = extractSummary(fullText);
-              const html = buildPreviewHTML(files);
-              const creditsUsed = calculateCredits(event.inputTokens, event.outputTokens);
-
-              onDone?.({
-                fullText,
-                files,
-                fileNames: Object.keys(files),
-                html,
-                summary,
-                inputTokens: event.inputTokens,
-                outputTokens: event.outputTokens,
-                creditsUsed,
-                model: event.model,
-              });
-            }
-
-            if (event.type === 'error') {
-              onError?.(event.error);
-            }
-          } catch (e) {
-            // Skip malformed JSON
-          }
-        }
-      }
+          onDone?.({
+            fullText: result.fullText,
+            files,
+            fileNames: Object.keys(files),
+            html,
+            summary,
+            inputTokens: result.inputTokens,
+            outputTokens: result.outputTokens,
+            creditsUsed,
+            model: result.model,
+          });
+        },
+        onError,
+        signal: controller.signal,
+      });
     } catch (error) {
       if (error.name !== 'AbortError') {
         onError?.(error.message || 'Connection failed');
@@ -178,9 +198,169 @@ export function streamGenerate({ messages, apiKey, model = 'claude-sonnet-4-6', 
   return controller;
 }
 
-const HEALTH_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL)
-  ? import.meta.env.VITE_API_URL.replace('/api/generate', '/api/health')
-  : '/api/health';
+/**
+ * Stream tool-use based generation (v2)
+ */
+export function streamGenerateV2({ messages, apiKey, model = 'claude-sonnet-4-6', projectFiles = {}, onText, onDone, onError, onToolUse, onStatus }) {
+  const controller = new AbortController();
+
+  (async () => {
+    onStatus?.('connecting');
+
+    try {
+      const response = await fetch(API_V2_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ messages, model, projectFiles }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Server error' }));
+        onError?.(err.error || `HTTP ${response.status}`);
+        return;
+      }
+
+      onStatus?.('streaming');
+
+      await readSSEStream(response, {
+        onText,
+        onToolUse,
+        onDone: (result) => {
+          const creditsUsed = calculateCredits(result.inputTokens, result.outputTokens);
+          onDone?.({
+            ...result,
+            creditsUsed,
+          });
+        },
+        onError,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        onError?.(error.message || 'Connection failed');
+      }
+    }
+  })();
+
+  return controller;
+}
+
+/**
+ * Stream architecture plan generation
+ */
+export function streamPlan({ messages, apiKey, model = 'claude-sonnet-4-6', onText, onDone, onError, onStatus }) {
+  const controller = new AbortController();
+
+  (async () => {
+    onStatus?.('connecting');
+
+    try {
+      const response = await fetch(API_PLAN_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ messages, model }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Server error' }));
+        onError?.(err.error || `HTTP ${response.status}`);
+        return;
+      }
+
+      onStatus?.('streaming');
+
+      await readSSEStream(response, {
+        onText,
+        onDone: (result) => {
+          // Try to parse the plan JSON from the full text
+          let plan = null;
+          try {
+            // Strip any markdown code fences
+            const cleanText = result.fullText
+              .replace(/```json\s*/g, '')
+              .replace(/```\s*/g, '')
+              .trim();
+            plan = JSON.parse(cleanText);
+          } catch (e) {
+            // If JSON parse fails, return raw text
+          }
+
+          const creditsUsed = calculateCredits(result.inputTokens, result.outputTokens);
+          onDone?.({
+            ...result,
+            plan,
+            creditsUsed,
+          });
+        },
+        onError,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        onError?.(error.message || 'Connection failed');
+      }
+    }
+  })();
+
+  return controller;
+}
+
+/**
+ * Stream discussion/conversation response
+ */
+export function streamDiscuss({ messages, apiKey, model = 'claude-sonnet-4-6', onText, onDone, onError, onStatus }) {
+  const controller = new AbortController();
+
+  (async () => {
+    onStatus?.('connecting');
+
+    try {
+      const response = await fetch(API_DISCUSS_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ messages, model }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Server error' }));
+        onError?.(err.error || `HTTP ${response.status}`);
+        return;
+      }
+
+      onStatus?.('streaming');
+
+      await readSSEStream(response, {
+        onText,
+        onDone: (result) => {
+          const creditsUsed = calculateCredits(result.inputTokens, result.outputTokens);
+          onDone?.({ ...result, creditsUsed });
+        },
+        onError,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        onError?.(error.message || 'Connection failed');
+      }
+    }
+  })();
+
+  return controller;
+}
+
+const HEALTH_URL = `${API_BASE}/api/health`;
 
 export async function checkBackendHealth() {
   try {

@@ -1,16 +1,20 @@
-# MaterialFlow AI
+<p align="center">
+  <img src="https://img.shields.io/badge/MaterialFlow_AI-v2.0-8AB4F8?style=for-the-badge&labelColor=0C0C14" alt="MaterialFlow AI" />
+</p>
 
-**AI-powered platform for building full-stack web and mobile applications.**
-Prompt, run, edit, and deploy — all from your browser.
+<h1 align="center">MaterialFlow AI</h1>
 
----
+<p align="center">
+  <strong>Production-grade AI platform for building full-stack web and mobile applications.</strong><br/>
+  Prompt, Plan, Build, Deploy — all from your browser.
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/React-18.3-61DAFB?style=for-the-badge&logo=react&logoColor=white" alt="React" />
   <img src="https://img.shields.io/badge/Vite-6.0-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite" />
   <img src="https://img.shields.io/badge/Node.js-20-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/Express-5.x-000000?style=for-the-badge&logo=express&logoColor=white" alt="Express" />
-  <img src="https://img.shields.io/badge/Anthropic_Claude-API-191919?style=for-the-badge&logo=anthropic&logoColor=white" alt="Anthropic" />
+  <img src="https://img.shields.io/badge/Anthropic_Claude-Tool_Use-191919?style=for-the-badge&logo=anthropic&logoColor=white" alt="Anthropic" />
   <img src="https://img.shields.io/badge/Monaco_Editor-VSCode-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white" alt="Monaco" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/GitHub_Actions-CI/CD-2088FF?style=for-the-badge&logo=githubactions&logoColor=white" alt="GitHub Actions" />
@@ -18,23 +22,230 @@ Prompt, run, edit, and deploy — all from your browser.
 
 ---
 
-## Features
+## Key Features
 
-- **AI Code Generation** — Describe your app and get a full working codebase
-- **Live Preview** — See your app running in real-time in an embedded browser
-- **Monaco Code Editor** — Full VS Code editing experience with syntax highlighting
-- **Multi-Model Support** — Claude Sonnet 4, Opus 4, GPT-4o, Gemini 2.5 Pro, and more
-- **Template Library** — Pre-built templates for common app types (dashboards, e-commerce, etc.)
-- **Project Management** — Multiple tabs, renaming, forking, and ZIP export
-- **Dark and Light Themes** — Premium design system with smooth theme transitions
-- **Mobile Preview** — Device frame preview for React Native / Expo apps
-- **Architecture Planner** — Plan your app's component tree and tech stack before building
-- **Discussion Mode** — Discuss ideas with AI without generating code
-- **One-Click Deploy** — Deploy to Netlify, Vercel, Cloudflare, or GitHub Pages
+| Feature | Description |
+|---------|-------------|
+| **AI Code Generation** | Describe your app, get a full working codebase via Claude Sonnet/Opus |
+| **Tool-Use API (v2)** | Surgical multi-file editing — no full regeneration, just precise diffs |
+| **Inspect Mode** | v0-style point-and-click element selection for contextual AI editing |
+| **Architecture Planner** | AI-powered component tree, API design, and tech stack analysis |
+| **Discussion Mode** | Conversational AI advisor — no code, just strategy and guidance |
+| **Monaco Editor** | Full VS Code editing experience with syntax highlighting |
+| **Live Preview** | Real-time iframe preview with error capture and "Fix with AI" |
+| **Mobile Preview** | Device frame preview for React Native / Expo apps |
+| **Dark and Light Themes** | Premium design system with 40+ CSS tokens and smooth transitions |
+| **One-Click Deploy** | Netlify, Vercel, Cloudflare Pages, or GitHub Pages |
+| **Multi-Project Tabs** | Tabbed workspace with rename, fork, delete, and ZIP export |
+| **Secure by Default** | API keys local-only, backend proxy, rate limiting, input validation |
+
+---
+
+## Production Architecture
+
+### High-Level System Overview
+
+```mermaid
+graph TB
+    subgraph Client["Browser Client"]
+        UI["React 18 + Vite 6<br/>SPA Application"]
+        Monaco["Monaco Editor<br/>Code Editing"]
+        Preview["iframe Preview<br/>Live Rendering"]
+        Store["localStorage<br/>Project Persistence"]
+    end
+
+    subgraph Server["Express Backend"]
+        Proxy["API Proxy<br/>Rate Limited"]
+        GenV1["/api/generate<br/>Full Code Gen"]
+        GenV2["/api/generate-v2<br/>Tool Use Diffing"]
+        Plan["/api/plan<br/>Architecture AI"]
+        Discuss["/api/discuss<br/>Conversational AI"]
+    end
+
+    subgraph AI["Anthropic Claude"]
+        Sonnet["Claude Sonnet 4"]
+        Opus["Claude Opus 4"]
+        Tools["Tool Use API<br/>read/write/edit/delete"]
+    end
+
+    subgraph Deploy["Deployment Targets"]
+        Vercel["Vercel"]
+        Netlify["Netlify"]
+        CF["Cloudflare Pages"]
+        GHP["GitHub Pages"]
+    end
+
+    UI -->|SSE Stream| Proxy
+    Proxy --> GenV1
+    Proxy --> GenV2
+    Proxy --> Plan
+    Proxy --> Discuss
+    GenV1 -->|Streaming| Sonnet
+    GenV2 -->|Tool Calls| Tools
+    Plan -->|JSON Response| Sonnet
+    Discuss -->|Streaming| Sonnet
+    Tools --> Opus
+    UI --> Monaco
+    UI --> Preview
+    UI --> Store
+    UI -->|Export| Deploy
+
+    style Client fill:#1a1a2e,stroke:#8AB4F8,color:#E8EAED
+    style Server fill:#1a1a2e,stroke:#81C995,color:#E8EAED
+    style AI fill:#1a1a2e,stroke:#C58AF9,color:#E8EAED
+    style Deploy fill:#1a1a2e,stroke:#F48FB1,color:#E8EAED
+```
+
+### Frontend Component Architecture
+
+```mermaid
+graph TD
+    App["App.jsx<br/>Root State Manager"]
+
+    subgraph Layout["Layout Shell"]
+        Header["Header.jsx<br/>Logo / Theme / Actions"]
+        Sidebar["Sidebar.jsx<br/>Project List"]
+        Tabs["ProjectTabs.jsx<br/>Multi-Tab Workspace"]
+        StatusBar["StatusBar.jsx<br/>Agent Status / Credits"]
+    end
+
+    subgraph Modes["Mode Panels"]
+        Chat["ChatPanel.jsx<br/>AI Chat + Templates"]
+        PlanP["PlanPanel.jsx<br/>Architecture AI"]
+        DiscussP["DiscussPanel.jsx<br/>Conversational AI"]
+    end
+
+    subgraph Workbench["Workbench"]
+        WB["WorkbenchPanel.jsx<br/>Preview/Code Toggle"]
+        CodeView["CodeView<br/>Monaco Editor"]
+        WebPreview["WebPreview<br/>iframe + Inspect"]
+        MobPreview["MobilePreview<br/>Device Frame"]
+    end
+
+    subgraph Engine["Engine Layer"]
+        Stream["streamEngine.js<br/>SSE Streaming Client"]
+        CodeGen["codeGenerator.js<br/>Template Fallback"]
+        ProjStore["projectStore.js<br/>localStorage CRUD"]
+        DiffEng["diffEngine.js<br/>Surgical File Patching"]
+    end
+
+    App --> Header
+    App --> Sidebar
+    App --> Tabs
+    App --> StatusBar
+    App --> Chat
+    App --> PlanP
+    App --> DiscussP
+    App --> WB
+
+    WB --> CodeView
+    WB --> WebPreview
+    WB --> MobPreview
+
+    Chat --> Stream
+    PlanP --> Stream
+    DiscussP --> Stream
+    App --> CodeGen
+    App --> ProjStore
+    Stream --> DiffEng
+
+    style App fill:#4285F4,stroke:#8AB4F8,color:#fff
+    style Engine fill:#0C0C14,stroke:#C58AF9,color:#E8EAED
+    style Modes fill:#0C0C14,stroke:#81C995,color:#E8EAED
+    style Workbench fill:#0C0C14,stroke:#F48FB1,color:#E8EAED
+```
+
+### API Streaming Pipeline
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as React UI
+    participant Engine as streamEngine.js
+    participant Server as Express Proxy
+    participant Claude as Anthropic API
+
+    User->>UI: Types prompt
+    UI->>Engine: streamGenerate(messages)
+    Engine->>Server: POST /api/generate (SSE)
+    Server->>Claude: messages.stream()
+
+    loop Streaming Response
+        Claude-->>Server: text delta
+        Server-->>Engine: data: {"type":"text","text":"..."}
+        Engine-->>UI: onText(chunk, fullText)
+        UI-->>User: Live preview updates
+    end
+
+    Claude-->>Server: finalMessage (usage stats)
+    Server-->>Engine: data: {"type":"done","inputTokens":...}
+    Engine->>Engine: parseFiles(fullText)
+    Engine->>Engine: buildPreviewHTML(files)
+    Engine-->>UI: onDone({files, html, creditsUsed})
+    UI-->>User: Final preview + file tree
+```
+
+### Tool-Use Flow (v2 — Surgical Editing)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as React UI
+    participant Engine as streamEngine.js
+    participant Diff as diffEngine.js
+    participant Server as Express Proxy
+    participant Claude as Claude + Tools
+
+    User->>UI: "Change the button color to blue"
+    UI->>Engine: streamGenerateV2(messages, projectFiles)
+    Engine->>Server: POST /api/generate-v2
+    Server->>Claude: messages.stream({tools})
+
+    Claude-->>Server: tool_use: edit_file
+    Server-->>Engine: {"type":"tool_use","toolName":"edit_file"}
+    Engine->>Diff: applyToolResult(files, toolResult)
+    Diff-->>Engine: {files, changedFiles, action}
+    Engine-->>UI: onToolUse - update preview
+
+    Claude-->>Server: text: "I changed the button..."
+    Server-->>Engine: {"type":"text"}
+    Engine-->>UI: Show explanation
+
+    Claude-->>Server: finalMessage
+    Server-->>Engine: {"type":"done"}
+    Engine-->>UI: onDone({creditsUsed})
+```
+
+### Inspect Mode Flow (v0-Style Contextual Editing)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Preview as iframe Preview
+    participant WB as WorkbenchPanel
+    participant Chat as ChatPanel
+    participant AI as AI Generation
+
+    User->>WB: Toggle Inspect Mode
+    WB->>Preview: Inject highlight script
+    User->>Preview: Hover element
+    Preview->>Preview: Add blue outline highlight
+    User->>Preview: Click element
+    Preview->>WB: postMessage({type: inspect-element, html, selector})
+    WB->>Chat: onInspectSelect(context)
+    Chat->>Chat: Show context pill above input
+    Chat->>Chat: Auto-populate: "Update this button..."
+    User->>Chat: Complete prompt + send
+    Chat->>AI: Generate with element context
+    AI-->>Preview: Updated code with changes
+```
+
+---
 
 ## Quick Start
 
 ### Prerequisites
+
 - **Node.js** >= 18
 - **npm** >= 9
 
@@ -42,7 +253,7 @@ Prompt, run, edit, and deploy — all from your browser.
 
 ```bash
 # Clone the repository
-git clone <repo-url>
+git clone https://github.com/Ashutosh0x/materialflow-ai.git
 cd materialflow-ai
 
 # Install dependencies
@@ -64,46 +275,81 @@ The backend API runs at **http://localhost:3001**
 ### API Keys
 
 To use AI code generation, add your Anthropic API key in **Settings > API Keys**.
-Keys are stored locally in your browser's localStorage.
+Keys are stored locally in your browser's localStorage — never sent to our servers.
+
+---
 
 ## Project Structure
 
 ```
 materialflow-ai/
-|-- index.html              # App entry point with SEO meta tags
-|-- package.json            # Dependencies and scripts
-|-- vite.config.js          # Vite config with API proxy and code splitting
-|-- .env.example            # Environment variable documentation
-|-- server/
-|   +-- index.js            # Express backend for Anthropic API proxy
-+-- src/
-    |-- main.jsx            # React root with ErrorBoundary
-    |-- App.jsx             # Main app with state management
-    |-- components/
-    |   |-- Header.jsx      # Top bar with project controls
-    |   |-- Sidebar.jsx     # Project list and templates
-    |   |-- ChatPanel.jsx   # AI chat with template cards
-    |   |-- WorkbenchPanel.jsx  # Preview + Monaco code editor
-    |   |-- PlanPanel.jsx   # Architecture planner
-    |   |-- DiscussPanel.jsx # Discussion mode
-    |   |-- SettingsPanel.jsx # Settings with API key management
-    |   |-- ProjectTabs.jsx # Multi-project tabs
-    |   |-- StatusBar.jsx   # Bottom status bar
-    |   |-- DeployModal.jsx # Deployment wizard
-    |   |-- DeployFab.jsx   # Deploy floating button
-    |   |-- NewProjectModal.jsx # New project wizard
-    |   |-- ModelSelector.jsx # AI model picker
-    |   |-- AgentStatus.jsx # AI agent status indicator
-    |   |-- Toast.jsx       # Toast notification system
-    |   |-- ErrorBoundary.jsx # Global error recovery
-    |   +-- ConfirmDialog.jsx # Custom confirm dialog
-    |-- engine/
-    |   |-- codeGenerator.js   # Template-based code generation
-    |   |-- streamEngine.js    # Real-time AI streaming client
-    |   +-- projectStore.js    # localStorage persistence layer
-    +-- styles/
-        +-- index.css       # Complete design system (dark/light themes)
+├── index.html                  # App entry point with SEO meta tags
+├── package.json                # Dependencies and scripts
+├── vite.config.js              # Vite config with API proxy and code splitting
+├── .env.example                # Environment variable documentation
+├── Dockerfile                  # Multi-stage production Docker build
+├── docker-compose.yml          # Container orchestration
+├── nginx.conf                  # Nginx reverse proxy config
+├── vercel.json                 # Vercel deployment config
+├── netlify.toml                # Netlify deployment config
+├── server/
+│   └── index.js                # Express backend — 4 API endpoints + rate limiting
+└── src/
+    ├── main.jsx                # React root with ErrorBoundary
+    ├── App.jsx                 # Main app — state management and orchestration
+    ├── components/
+    │   ├── Header.jsx          # Top bar — logo, project name, theme, actions
+    │   ├── Sidebar.jsx         # Project list with CRUD operations
+    │   ├── ChatPanel.jsx       # AI chat — templates, inspect context, streaming
+    │   ├── WorkbenchPanel.jsx  # Preview + Monaco editor + inspect mode
+    │   ├── PlanPanel.jsx       # AI architecture planner (real Claude streaming)
+    │   ├── DiscussPanel.jsx    # AI discussion mode (real Claude streaming)
+    │   ├── SettingsPanel.jsx   # API key management, theme, data export
+    │   ├── ProjectTabs.jsx     # Multi-project tabbed workspace
+    │   ├── StatusBar.jsx       # Bottom bar — agent status, credits, model info
+    │   ├── DeployModal.jsx     # Deployment wizard (Netlify/Vercel/CF/GHP)
+    │   ├── DeployFab.jsx       # Floating deploy button
+    │   ├── NewProjectModal.jsx # New project wizard with infra options
+    │   ├── ModelSelector.jsx   # AI model picker dropdown
+    │   ├── AgentStatus.jsx     # Agent thinking/writing/done indicator
+    │   ├── Toast.jsx           # Toast notification system
+    │   ├── ErrorBoundary.jsx   # Global error recovery UI
+    │   └── ConfirmDialog.jsx   # Custom confirmation dialog
+    ├── engine/
+    │   ├── streamEngine.js     # SSE streaming — generate, plan, discuss, v2
+    │   ├── codeGenerator.js    # Template-based fallback code generation
+    │   ├── diffEngine.js       # Surgical file patching from tool-use API
+    │   └── projectStore.js     # localStorage persistence layer
+    └── styles/
+        └── index.css           # 4200-line design system (dark/light themes)
 ```
+
+---
+
+## API Endpoints
+
+The Express backend exposes 4 streaming SSE endpoints:
+
+| Endpoint | Method | Purpose | System Prompt |
+|----------|--------|---------|---------------|
+| `/api/generate` | POST | Full code generation (v1) | Build-focused — generates file blocks |
+| `/api/generate-v2` | POST | Tool-use based editing | Surgical edits via read_file, write_file, edit_file |
+| `/api/plan` | POST | Architecture planning | Returns structured JSON (components, APIs, files) |
+| `/api/discuss` | POST | Conversational advice | No code — strategy, best practices, requirements |
+| `/api/health` | GET | Health check | Returns status, timestamp, version |
+
+### Tool Definitions (v2)
+
+| Tool | Description |
+|------|-------------|
+| `read_file` | Read a project file's contents |
+| `write_file` | Create or overwrite a file |
+| `edit_file` | Search-and-replace within a file |
+| `delete_file` | Remove a file from the project |
+| `list_files` | List all project files |
+| `add_dependency` | Add an NPM package to package.json |
+
+---
 
 ## Scripts
 
@@ -112,22 +358,27 @@ materialflow-ai/
 | `npm run dev` | Start Vite dev server (frontend only) |
 | `npm run server` | Start Express backend server |
 | `npm run dev:full` | Start both frontend and backend concurrently |
-| `npm run build` | Production build |
-| `npm run preview` | Preview production build |
+| `npm run build` | Production build with code splitting |
+| `npm run preview` | Preview production build locally |
 
-## Architecture
+---
+
+## Architecture Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 18 + Vite 6, vanilla CSS design system |
-| Editor | Monaco Editor (VS Code engine), lazy loaded |
-| Backend | Express.js proxy for Anthropic API streaming (SSE) |
-| Storage | localStorage for projects, settings, API keys |
-| Export | JSZip for multi-file project export |
-| Icons | Lucide React + Material Symbols |
-| CI/CD | GitHub Actions (lint, build, security, deploy) |
-| Container | Docker multi-stage build, Nginx reverse proxy |
-| Deploy | Vercel, Netlify, Cloudflare Pages, GitHub Pages |
+| **Frontend** | React 18 + Vite 6, vanilla CSS design system (4200 lines) |
+| **Editor** | Monaco Editor (VS Code engine), lazy loaded via React.lazy |
+| **Backend** | Express.js proxy — 4 SSE streaming endpoints with rate limiting |
+| **AI** | Anthropic Claude (Sonnet 4 / Opus 4) — streaming + tool use |
+| **Storage** | localStorage for projects, settings, API keys |
+| **Export** | JSZip for multi-file project ZIP export |
+| **Icons** | Lucide React + Material Symbols Outlined |
+| **CI/CD** | GitHub Actions (lint, type-check, build, security, deploy) |
+| **Container** | Docker multi-stage build, Nginx reverse proxy |
+| **Deploy** | Vercel, Netlify, Cloudflare Pages, GitHub Pages |
+
+---
 
 ## Deployment
 
@@ -137,15 +388,11 @@ materialflow-ai/
 npx vercel --prod
 ```
 
-Configuration is in `vercel.json`.
-
 ### Netlify
 
 ```bash
 npx netlify deploy --prod --dir=dist
 ```
-
-Configuration is in `netlify.toml`.
 
 ### Docker
 
@@ -169,15 +416,43 @@ Push to `main` triggers automatic deployment. Required secrets:
 | `VERCEL_ORG_ID` | Vercel organization ID |
 | `VERCEL_PROJECT_ID` | Vercel project ID |
 
+---
+
 ## Security
 
-- API keys are stored locally in the browser (never sent to our servers)
-- Backend proxy prevents client-side API key exposure
-- Rate limiting on API proxy endpoint (20 req/min)
-- Input validation on all server endpoints
-- CORS enabled for development
-- Security headers via Nginx (CSP, X-Frame-Options, HSTS)
+- **Local API keys** — stored in browser localStorage, never transmitted to our servers
+- **Backend proxy** — all Anthropic calls routed through Express proxy to protect keys
+- **Rate limiting** — 20 requests/minute per IP on all API endpoints
+- **Input validation** — message structure, role, content type validated server-side
+- **Client disconnect** — SSE streams abort gracefully on client disconnect
+- **CORS** — enabled for development, locked down in production via Nginx
+- **Security headers** — CSP, X-Frame-Options, HSTS via Nginx reverse proxy
+- **Docker isolation** — non-root user, minimal base image, health checks
+
+---
+
+## Roadmap
+
+- [x] v1 — Full code generation with Claude streaming
+- [x] v2 — Tool-use based surgical file editing
+- [x] Inspect Mode — v0-style point-and-click contextual editing
+- [x] AI Architecture Planner — real Claude streaming
+- [x] AI Discussion Mode — conversational advisor
+- [ ] Sandpack Integration — real NPM packages in-browser
+- [ ] WebContainers — full Node.js runtime in the browser
+- [ ] Expo/React Native — mobile app QR-code preview
+- [ ] Supabase Integration — database + auth in one click
+- [ ] Real Deployment — actual Netlify/Vercel API integration
+- [ ] Collaborative Editing — multi-user real-time sessions
+
+---
 
 ## License
 
 [MIT](LICENSE)
+
+---
+
+<p align="center">
+  Built by <a href="https://github.com/Ashutosh0x">Ashutosh0x</a>
+</p>

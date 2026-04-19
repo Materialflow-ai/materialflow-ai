@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Paperclip, Image, ArrowUp, Copy, ThumbsUp, ThumbsDown, RefreshCw, Sparkles, LayoutDashboard, ShoppingBag, MessageSquare, BarChart3, ListTodo, Music, Dumbbell, CloudSun, Bot, CreditCard } from 'lucide-react';
+import { Paperclip, Image, ArrowUp, Copy, ThumbsUp, ThumbsDown, RefreshCw, Sparkles, LayoutDashboard, ShoppingBag, MessageSquare, BarChart3, ListTodo, Music, Dumbbell, CloudSun, Bot, CreditCard, X } from 'lucide-react';
 import ModelSelector from './ModelSelector';
 import AgentStatus from './AgentStatus';
 
@@ -14,10 +14,21 @@ const TEMPLATES = [
 
 export default function ChatPanel({
   messages, agentStatus, agentAction, onSend, onTemplateClick, mode, platform, width,
-  selectedModel, onModelClick, showModelSelector, models, onModelSelect, credits
+  selectedModel, onModelClick, showModelSelector, models, onModelSelect, credits,
+  inspectContext, onClearInspect
 }) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef(null);
+
+  // Auto-populate input when inspect context arrives
+  useEffect(() => {
+    if (inspectContext) {
+      const tag = inspectContext.tagName || 'element';
+      const cls = inspectContext.className ? `.${inspectContext.className.split(' ')[0]}` : '';
+      const text = inspectContext.textContent ? ` "${inspectContext.textContent.slice(0, 40)}"` : '';
+      setInput(`Update this <${tag}${cls}>${text} to `);
+    }
+  }, [inspectContext]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -148,6 +159,14 @@ export default function ChatPanel({
       </div>
 
       <div className="chat-input-container">
+        {inspectContext && (
+          <div className="inspect-context-pill">
+            <span className="inspect-context-tag">Context</span>
+            <code>&lt;{inspectContext.tagName}{inspectContext.className ? `.${inspectContext.className.split(' ')[0]}` : ''}&gt;</code>
+            <span className="inspect-context-text">{inspectContext.textContent?.slice(0, 30)}</span>
+            <button className="icon-btn" onClick={onClearInspect} style={{ width: 20, height: 20 }}><X size={11} /></button>
+          </div>
+        )}
         <div className="chat-input-box">
           <button className="icon-btn" title="Attach file" style={{ width: 30, height: 30 }}>
             <Paperclip size={16} />
