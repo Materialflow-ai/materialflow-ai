@@ -1,0 +1,195 @@
+# CI/CD Pipeline — MaterialFlow AI
+# Runs on push to main and all pull requests
+# Jobs: lint, build, test, security audit, deploy preview, production deploy
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # ─────────────────────────────────────────────
+  # LINT & FORMAT CHECK
+  # ─────────────────────────────────────────────
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npx eslint src/ --ext .js,.jsx --max-warnings 0
+
+      - name: Check formatting
+        run: npx prettier --check "src/**/*.{js,jsx,css,json}"
+
+  # ─────────────────────────────────────────────
+  # BUILD
+  # ─────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+      - name: Check bundle size
+        run: |
+          echo "=== Bundle Size Report ==="
+          echo "========================="
+          du -sh dist/
+          echo ""
+          echo "Asset breakdown:"
+          find dist/assets -type f -exec du -h {} \; | sort -rh
+          echo ""
+          TOTAL=$(du -sb dist/ | cut -f1)
+          MAX_SIZE=2097152  # 2MB limit
+          if [ "$TOTAL" -gt "$MAX_SIZE" ]; then
+            echo "WARNING: Total bundle size exceeds 2MB ($TOTAL bytes)"
+          else
+            echo "OK: Bundle size is within limits ($TOTAL bytes)"
+          fi
+
+  # ─────────────────────────────────────────────
+  # SECURITY AUDIT
+  # ─────────────────────────────────────────────
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --production --audit-level=high
+        continue-on-error: true
+
+      - name: Check for secrets in code
+        run: |
+          echo "Checking for hardcoded secrets..."
+          PATTERNS="sk-ant|sk-proj|api_key.*=.*['\"][a-zA-Z0-9]{20}|password.*=.*['\"]"
+          if grep -rn -E "$PATTERNS" src/ server/ --include="*.js" --include="*.jsx" 2>/dev/null; then
+            echo "FAIL: Potential secrets found in source code!"
+            exit 1
+          else
+            echo "OK: No hardcoded secrets detected"
+          fi
+
+  # ─────────────────────────────────────────────
+  # DEPLOY PREVIEW (PRs only)
+  # ─────────────────────────────────────────────
+  deploy-preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'pull_request'
+    environment:
+      name: preview
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Deploy to Netlify (Preview)
+        id: deploy
+        uses: nwtgck/actions-netlify@v3
+        with:
+          publish-dir: ./dist
+          production-deploy: false
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "PR #${{ github.event.pull_request.number }} preview"
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        timeout-minutes: 5
+        continue-on-error: true
+
+  # ─────────────────────────────────────────────
+  # DEPLOY PRODUCTION (main branch only)
+  # ─────────────────────────────────────────────
+  deploy-production:
+    name: Deploy Production
+    runs-on: ubuntu-latest
+    needs: [build, security]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Deploy to Netlify (Production)
+        id: deploy
+        uses: nwtgck/actions-netlify@v3
+        with:
+          publish-dir: ./dist
+          production-deploy: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "Production deploy from ${{ github.sha }}"
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Deploy to Vercel (Production)
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'
+          working-directory: ./
+        continue-on-error: true

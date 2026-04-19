@@ -1,0 +1,35 @@
+{
+  "name": "materialflow-ai",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "server": "node server/index.js",
+    "dev:full": "npx concurrently \"node server/index.js\" \"vite\"",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
+    "@monaco-editor/react": "^4.7.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "file-saver": "^2.0.5",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.2.1",
+    "eslint": "^10.2.1",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.8.3",
+    "vite": "^6.0.0"
+  }
+}
